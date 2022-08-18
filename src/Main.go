@@ -107,6 +107,7 @@ func UpdateRobloxPresence() {
 
 		if (reset == false) {
 			reset = true
+			placeId = ""
 
 			client.Logout()
 			fmt.Println("reset client activity")
