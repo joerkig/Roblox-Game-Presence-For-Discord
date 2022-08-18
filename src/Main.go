@@ -1,14 +1,16 @@
 package main
 
 import (
-	"fmt"
-	"github.com/shirou/gopsutil/process"
-	"time"
-	"regexp"
-	"net/http"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/hugolgst/rich-go/client"
-	//"strconv"
+	"github.com/shirou/gopsutil/process"
 )
 
 var (
@@ -28,13 +30,28 @@ type MarketPlaceInfo struct { // https://mholt.github.io/json-to-go/
 	IconImageAssetID       int64       `json:"IconImageAssetId"`
 }
 
+
+
+type ThumbnailInfo struct { // https://mholt.github.io/json-to-go/
+		Data []struct {
+			TargetID int64  `json:"targetId"`
+			State    string `json:"state"`
+			ImageURL string `json:"imageUrl"`
+		} `json:"data"`
+}
+
+type Universe struct { // https://mholt.github.io/json-to-go/
+	UniverseID int64 `json:"UniverseId"`
+}
+
 func GetProcessByName(targetProcessName string) *process.Process {
 	processes, _ := process.Processes()
 
 	for _, proc := range processes {
 		name, _ := proc.Name()
+		cmdLine, _ := proc.Cmdline()
 		
-		if (name == targetProcessName) {
+		if (name == targetProcessName && strings.Contains(cmdLine, "--play")) {
 			return proc
 		}
 	}
@@ -49,6 +66,33 @@ func GetPlaceInfoByPlaceId(placeId string) *MarketPlaceInfo {
 	defer resp.Body.Close()
 
 	var info *MarketPlaceInfo
+
+	json.NewDecoder(resp.Body).Decode(&info)
+
+	return info
+}
+
+func GetUniverseIdByPlaceId(placeId string) *Universe {
+	url := "https://api.roblox.com/universes/get-universe-containing-place?placeid=" + placeId
+	resp, _ := http.Get(url)
+
+	defer resp.Body.Close()
+
+	var info *Universe
+
+	json.NewDecoder(resp.Body).Decode(&info)
+
+	return info
+}
+
+
+func GetIconByUniverseId(UniverseID string) *ThumbnailInfo {
+	url := "https://thumbnails.roblox.com/v1/games/icons?universeIds=" + UniverseID + "&size=512x512&format=Png&isCircular=false"
+	resp, _ := http.Get(url)
+
+	defer resp.Body.Close()
+
+	var info *ThumbnailInfo
 
 	json.NewDecoder(resp.Body).Decode(&info)
 
@@ -92,11 +136,13 @@ func UpdateRobloxPresence() {
 	if (placeMatch != placeId) {
 		placeId = placeMatch
 		place := GetPlaceInfoByPlaceId(placeId)
+		universeId := GetUniverseIdByPlaceId(placeId).UniverseID
+		thumbnail := GetIconByUniverseId(strconv.FormatInt(universeId, 10)).Data[0].ImageURL
 
 		client.SetActivity(client.Activity {
 			State: "by " + place.Creator.Name,
 			Details: place.Name,
-			LargeImage: "roblox_logo",
+			LargeImage: thumbnail,
 			LargeText: "Playing Roblox!",
 			Buttons: []*client.Button {
 				&client.Button {
